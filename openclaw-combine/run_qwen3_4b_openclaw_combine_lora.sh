@@ -110,8 +110,8 @@ OPTIMIZER_ARGS=(
 
 LORA_ARGS=(
    --use-lora
-   --lora-rank 16
-   --lora-alpha 32
+   --lora-rank 64
+   --lora-alpha 64
    --lora-target-modules "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
 )
 
