@@ -46,11 +46,34 @@ pip install --no-build-isolation "transformer_engine[pytorch,core_cu12]==2.10.0"
 # apt
 apt-get update
 apt-get install -y python3-apt
+```
 
-# upgrade to support Qwen3.5, but keep 4.57.1 if using Qwen3
+If you want to use Qwen3.5 (omit this if only use Qwen3)
+
+```
+# upgrade transformers
 pip install transformers==5.3.0
 ```
 
+If you want to use Qwen3.5 for multimodal (omit if only use Qwen3, or use Qwen3.5 text only)
+
+```
+# Megatron-Bridge for qwen35 vl
+cd OpenClaw-RL
+git clone --recursive https://github.com/NVIDIA-NeMo/Megatron-Bridge.git Megatron-Bridge-qwen35
+cd Megatron-Bridge-qwen35
+git checkout ebca893607d48388a6c083bfc143bc05621cc753
+git submodule update --init --recursive
+
+# Megatron-LM comes from the Megatron-Bridge submodule
+cd 3rdparty/Megatron-LM
+git checkout 17a67b9a97fb11a75933fd7f76ad76e1ac98a53d
+cd /path/to/Megatron-Bridge-qwen35
+
+python3 -m pip uninstall -y megatron-bridge megatron-core mbridge
+python3 -m pip install --no-deps -e ./3rdparty/Megatron-LM
+python3 -m pip install --no-deps -e ./
+```
 
 
 
