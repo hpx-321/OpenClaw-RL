@@ -6,7 +6,8 @@ log() { echo "[$(date +'%F %T')] $*"; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "[ERROR] missing cmd: $1"; exit 1; }; }
 
-export PYTHONBUFFERED=16
+export PYTHONUNBUFFERED=1
+export PYTHONFAULTHANDLER=1
 
 NUM_GPUS="${NUM_GPUS:-8}"
 ACTOR_GPUS="${ACTOR_GPUS:-4}"
@@ -14,6 +15,7 @@ ROLLOUT_GPUS="${ROLLOUT_GPUS:-4}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+CUSTOM_CONFIG_PATH="${CUSTOM_CONFIG_PATH:-${SCRIPT_DIR}/configs/rollout_qwen3.yaml}"
 
 export REPO_ROOT
 export SLIME_DIR="${REPO_ROOT}/slime"
@@ -45,9 +47,9 @@ export RAY_TMPDIR="${RAY_TMPDIR:-}"
 export WORKER_URLS="${WORKER_URLS:-}"
 
 ROUTER_SESSION_NAME="${ROUTER_SESSION_NAME:-terminal_router}"
-ROUTER_CONDA_ENV_PATH="${ROUTER_CONDA_ENV_PATH:-}"
+CONDA_ENV_PATH="${CONDA_ENV_PATH:-}"
 ROUTER_PROJECT_DIR="${ROUTER_PROJECT_DIR:-${REPO_ROOT}}"
-export ROUTER_CONDA_ENV_PATH
+export CONDA_ENV_PATH
 CONDA_PYTHON_VERSION="${CONDA_PYTHON_VERSION:-3.12}"
 export CONDA_PYTHON_VERSION
 ROUTER_HOST="${ROUTER_HOST:-0.0.0.0}"
@@ -62,7 +64,7 @@ CKPT_ARGS=(
   --ref-load "${REF_LOAD}"
   --load "${RESUME_LOAD}"
   --save "${SAVE_CKPT}"
-  --save-interval 3
+  --save-interval 8
   --rotary-base 1000000
 )
 
@@ -126,12 +128,16 @@ OPTIMIZER_ARGS=(
    --use-precision-aware-optimizer
 )
 
-WANDB_ARGS=(
-   --use-wandb
-   --wandb-project slime
-   --wandb-group qwen3-8B-rl_terminal
-   --wandb-key ${WANDB_KEY}
-)
+if [[ -n "${WANDB_KEY:-}" ]]; then
+  WANDB_ARGS=(
+    --use-wandb
+    --wandb-project ${WANDB_PROJECT}
+    --wandb-group ${WANDB_GROUP}
+    --wandb-key ${WANDB_KEY}
+  )
+else
+  WANDB_ARGS=()
+fi
 
 SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 2
@@ -149,6 +155,7 @@ MISC_ARGS=(
 CUSTOM_ARGS=(
    --custom-generate-function-path generate.generate
    --custom-rollout-log-function-path rollout_log.rollout_log
+   --custom-config-path "${CUSTOM_CONFIG_PATH}"
 )
 
 check_gpus() {
@@ -176,7 +183,7 @@ start_router() {
   mkdir -p "${ROUTER_PROJECT_DIR}/logs"
   local logf="${ROUTER_PROJECT_DIR}/logs/router_${ROUTER_PORT}.log"
 
-  "${ROUTER_CONDA_ENV_PATH}/bin/python" -m terminal-rl.router_server \
+  "${CONDA_ENV_PATH}/bin/python" -m terminal-rl.router_server \
     --host "${ROUTER_HOST}" --port "${ROUTER_PORT}" --workers "${WORKER_URLS}" \
     > "${logf}" 2>&1 &
 
@@ -247,7 +254,7 @@ build_runtime_env_json() {
   python3 - <<'PY'
 import json, os
 
-conda_env = os.environ.get("ROUTER_CONDA_ENV_PATH", "")
+conda_env = os.environ.get("CONDA_ENV_PATH", "")
 py_ver = os.environ.get("CONDA_PYTHON_VERSION", "3.12")
 site_packages = f"{conda_env}/lib/python{py_ver}/site-packages" if conda_env else ""
 

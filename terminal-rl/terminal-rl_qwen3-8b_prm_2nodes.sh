@@ -41,6 +41,7 @@ PRM_SGLANG_URL="${PRM_SGLANG_URL:-}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+CUSTOM_CONFIG_PATH="${CUSTOM_CONFIG_PATH:-${SCRIPT_DIR}/configs/rollout_qwen3.yaml}"
 export REPO_ROOT
 
 SLIME_DIR="${SLIME_DIR:-${REPO_ROOT}/slime}"
@@ -84,7 +85,7 @@ export RAY_TMPDIR=/tmp/ray_${MLP_ROLE_INDEX}
 export WORKER_URLS="${WORKER_URLS:-}"
 
 ROUTER_SESSION_NAME="${ROUTER_SESSION_NAME:-terminal_router}"
-ROUTER_CONDA_ENV_PATH="${ROUTER_CONDA_ENV_PATH:-}"
+CONDA_ENV_PATH="${CONDA_ENV_PATH:-}"
 ROUTER_PROJECT_DIR="${ROUTER_PROJECT_DIR:-${REPO_ROOT}}"
 ROUTER_HOST="${ROUTER_HOST:-0.0.0.0}"
 ROUTER_PORT="${ROUTER_PORT:-${ENV_SERVER_PORT}}"
@@ -98,7 +99,7 @@ CKPT_ARGS=(
   --ref-load "${REF_LOAD}"
   --load "${RESUME_LOAD}"
   --save "${SAVE_CKPT}"
-  --save-interval 3
+  --save-interval 8
   --rotary-base 1000000
 )
 
@@ -161,13 +162,12 @@ OPTIMIZER_ARGS=(
    --use-precision-aware-optimizer
 )
 
-WANDB_KEY_VALUE=${WANDB_KEY:-${WANDB_API_KEY:-}}
-if [ -n "${WANDB_KEY_VALUE}" ]; then
+if [[ -n "${WANDB_KEY:-}" ]]; then
   WANDB_ARGS=(
     --use-wandb
-    --wandb-project slime
-    --wandb-group qwen3-8B-prm-2nodes-rl_terminal
-    --wandb-key ${WANDB_KEY_VALUE}
+    --wandb-project ${WANDB_PROJECT}
+    --wandb-group ${WANDB_GROUP}
+    --wandb-key ${WANDB_KEY}
   )
 else
   WANDB_ARGS=()
@@ -189,6 +189,7 @@ MISC_ARGS=(
 CUSTOM_ARGS=(
    --custom-generate-function-path generate.generate
    --custom-rollout-log-function-path rollout_log.rollout_log
+   --custom-config-path "${CUSTOM_CONFIG_PATH}"
 )
 
 PRM_ARGS=(
@@ -245,7 +246,7 @@ start_router() {
   mkdir -p "${ROUTER_PROJECT_DIR}/logs"
   local logf="${ROUTER_PROJECT_DIR}/logs/router_${ROUTER_PORT}_2nodes.log"
 
-  "${ROUTER_CONDA_ENV_PATH}/bin/python" -m terminal-rl.router_server \
+  "${CONDA_ENV_PATH}/bin/python" -m terminal-rl.router_server \
     --host "${ROUTER_HOST}" --port "${ROUTER_PORT}" --workers "${WORKER_URLS}" \
     > "${logf}" 2>&1 &
 
@@ -333,11 +334,16 @@ build_runtime_env_json() {
   python3 - <<'PY'
 import json, os
 
+conda_env = os.environ.get("CONDA_ENV_PATH", "")
+py_ver = os.environ.get("CONDA_PYTHON_VERSION", "3.12")
+site_packages = f"{conda_env}/lib/python{py_ver}/site-packages" if conda_env else ""
+
 parts = [
   os.environ.get("REPO_ROOT",""),
   os.environ.get("SLIME_PKG_DIR",""),
   os.environ.get("MEGATRON_DIR",""),
   os.environ.get("SCRIPT_DIR",""),
+  site_packages,
 ]
 pythonpath = ":".join([p for p in parts if p])
 
