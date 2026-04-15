@@ -43,6 +43,7 @@
 
 ## 📰 News
 
+- **[2026/4/15]** 🙌 We sincerely thank [Fireworks AI](https://fireworks.ai) for its generous support of this project, which has enabled more experiments and faster iteration.
 - **[2026/4/15]** 🛠️ The mismatch between inference and training engines has been resolved now.
 - **[2026/4/11]** ✨ Qwen3.5 4B/9B/27B is supported now, both text and multi-modal!
 - **[2026/4/4]** 👨‍👦‍👦 We support optimizing a single model based on feedback from a group of people.
@@ -96,7 +97,7 @@ You do not need to manually label data. The system automatically:
 
 **On-Policy Distillation (OPD):** When the next state reveals useful hindsight, a judge model extracts a textual hint. This hint augments the original prompt to create an enhanced teacher, whose token-level log-probability gap with the student becomes a directional advantage signal richer than any scalar reward.
 
-**Combination Method:** OpenClaw-RL further combines Binary RL and OPD in a unified training recipe, leveraging the dense scalar supervision of Binary RL together with the richer token-level directional signal from OPD. This combination achieves stronger and more robust optimization than either method alone.
+**Hybrid Method:** OpenClaw-RL further combines Binary RL and OPD in a unified training recipe, leveraging the dense scalar supervision of Binary RL together with the richer token-level directional signal from OPD. This combination achieves stronger and more robust optimization than either method alone.
 
 ### From Personal Agents to Real-World Agentic RL
 The same framework supports both personalized OpenClaw optimization and scalable RL for **terminal**, **GUI**, **SWE**, and **tool-call** agents in real-world settings.
@@ -118,11 +119,11 @@ Our long-term goal is to **advance personalized, practically useful agents with 
 ✅ Best recipe discovery via demonstration experiments  
 ✅ Support LoRA Training  
 ✅ Deploy training on [Tinker](https://thinkingmachines.ai/tinker/)  
-⬜ Support low-precision training/inference  
-⬜ Beyond the policy: extend learning to skills and memory  
+✅ Deploy training on [Fireworks AI](https://fireworks.ai)
 
 #### Track 2 — [General Agents Optimization](#generalagent) (Scalable Infra)
-✅ **Release Track 2:** Scalable agentic RL infra for general agents  
+✅ **Release Track 2:** Scalable agentic RL infra for general agents
+✅ Support Qwen3.5
 ⬜ Support more cloud services  
 
 
@@ -247,21 +248,13 @@ For detailed environment setup, see [Slime](https://github.com/THUDM/slime) or [
 
 **Option 1: Tinker**
 
-Create a [Tinker API](https://thinkingmachines.ai/tinker/). That's all you need. But note that Tinker only supports LoRA, which may not be as effective as full fine-tuning. So we are still testing it.
+Create a [Tinker API](https://thinkingmachines.ai/tinker/). That's all you need. Tinker only supports LoRA, which may not be as effective as full fine-tuning, but it's really cheap.
+
+See [`./openclaw-tinker/README.md`](./openclaw-tinker/README.md) for setup details.
 
 **Option 2: Fireworks Training SDK**
 
-Use the [Fireworks Training SDK](https://fireworks.ai) for fully remote training and inference -- no local GPUs needed. Supports full-parameter and LoRA training.
-
-```bash
-cd openclaw-fireworks
-source .venv/bin/activate
-
-FIREWORKS_API_KEY="your-key" \
-BASE_MODEL="accounts/fireworks/models/qwen3-8b" \
-TRAINING_SHAPE_ID="accounts/fireworks/trainingShapes/qwen3-8b-128k" \
-python run_openclaw_fireworks.py
-```
+Use the [Fireworks Training SDK](https://fireworks.ai). Supports full-parameter and LoRA training.
 
 See [`./openclaw-fireworks/README.md`](./openclaw-fireworks/README.md) for setup details.
 
@@ -298,29 +291,7 @@ This method combines binary RL and OPD to achieve the best optimization.
 
 See [`./openclaw-combine/README.md`](./openclaw-combine/README.md) for algorithm details.
 
-**With LoRA** (parameter-efficient, fewer GPUs):
-```bash
-bash ../openclaw-combine/run_qwen3_4b_openclaw_combine_lora.sh
-```
 
-<a id="combinemethodtinker"></a>
-**With Tinker** (No GPUs at all)
-```bash
-cd openclaw-tinker
-python run.py --method combine --model-name Qwen/Qwen3-8B --batch-size 16 --prm-m 1 --w-opd 1.0 --w-rl 1.0
-```
-
-see [`./openclaw-tinker/README.md`](./openclaw-tinker/README.md) for setup details.
-
-<a id="combinemethodfireworks"></a>
-**With Fireworks** (No GPUs at all)
-```bash
-cd openclaw-fireworks
-source .venv/bin/activate
-FIREWORKS_API_KEY="your-key" W_OPD=1.0 W_RL=1.0 python run_openclaw_fireworks.py
-```
-
-see [`./openclaw-fireworks/README.md`](./openclaw-fireworks/README.md) for setup details.
 
 </details>
 
@@ -338,19 +309,6 @@ The PRM will automatically judge response quality from next-state feedback. We r
 
 See [`./openclaw-rl/README.md`](./openclaw-rl/README.md) for algorithm details.
 
-**With LoRA** (parameter-efficient, fewer GPUs):
-```bash
-bash ../openclaw-rl/run_qwen3_4b_openclaw_rl_lora.sh
-```
-
-**With Tinker** (No GPUs at all)
-```bash
-cd openclaw-tinker
-python run.py --method rl --model-name Qwen/Qwen3-8B --batch-size 16 --prm-m 3
-```
-
-see [`./openclaw-tinker/README.md`](./openclaw-tinker/README.md) for setup details.
-
 
 </details>
 
@@ -367,19 +325,6 @@ bash ../openclaw-opd/run_qwen3_4b_openclaw_opd.sh
 The system extracts hindsight hints from your feedback and distills them into the policy at the token level. We recommend providing concrete feedback (e.g., "you should have checked the file first" or "don't use that library").
 
 See [`./openclaw-opd/README.md`](./openclaw-opd/README.md) for algorithm details.
-
-**With LoRA** (parameter-efficient, fewer GPUs):
-```bash
-bash ../openclaw-opd/run_qwen3_4b_openclaw_opd_topk_lora.sh
-```
-
-**With Tinker** (No GPUs at all)
-```bash
-cd openclaw-tinker
-python run.py --method opd --model-name Qwen/Qwen3-8B --batch-size 16 --prm-m 1
-```
-
-see [`./openclaw-tinker/README.md`](./openclaw-tinker/README.md) for setup details.
 
 
 
@@ -406,7 +351,7 @@ We find that, under the combined optimization method, OpenClaw needs only 36 pro
   <img src="assets/openclawrl1performance.png"  alt="Overview"  width="750">
 </p>
 
-See [`./openclaw-test/README.md`](./openclaw-test/README.md) for setup and algorithm details.
+See [`./openclaw-test/README.md`](./openclaw-test/README.md) for setup and algorithm details. Example of evaluation [results](https://github.com/Gen-Verse/OpenClaw-RL/blob/main/openclaw-test/results.txt).
 </details>
 
 
