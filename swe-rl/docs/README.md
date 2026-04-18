@@ -12,6 +12,24 @@ Replace placeholders before running:
 | `<DATA_DIR>` | Directory containing dataset JSONL files |
 | `<REPO_ROOT>` | Path to the repo root |
 
+## PR-safe script overrides (required before run)
+
+The default 4B scripts no longer ship hardcoded private infra values (internal IPs,
+proxy endpoints, local SSH key paths, or machine-specific absolute paths). Set
+these env vars in your shell or `<ENV_FILE>` before launching:
+
+| Variable | Required | Used by | Example |
+| --- | --- | --- | --- |
+| `SWE_EXEC_SERVER_URLS` | Yes | train + eval | `http://10.0.0.1:5000,http://10.0.0.2:5000` |
+| `HF_CKPT` | Yes (train), recommended (eval) | train + eval | `<REPO_ROOT>/export/hf/swe-rl-4b_iter180` |
+| `CES_SSH_USER` | Optional | train + eval | `root` |
+| `CES_SSH_KEY` | Optional | train + eval | `<REPO_ROOT>/swe.pem` |
+| `HTTP_PROXY` / `HTTPS_PROXY` | Optional | train + eval | `http://<proxy-host>:<port>` |
+| `VERIFIED_DATA` | Optional | eval | `<REPO_ROOT>/data/swebench_verified/verified_eval_with_script.jsonl` |
+| `SWEGYM_DATA` | Optional | eval | `<REPO_ROOT>/data/swegym_293/train_with_eval_script.parquet` |
+| `PROMPT_DATA` | Optional | train | `<REPO_ROOT>/data/swegym_293/train_with_eval_script.parquet` |
+| `HF_HOME` | Optional | train + eval | `<ROOT>/systems/huggingface` |
+
 ## Eval: SWE-Bench Verified (sample)
 
 ```bash
@@ -57,6 +75,30 @@ unset MAX_INSTANCES
 cd <REPO_ROOT>
 bash swe-rl/eval/run_eval_swe.sh
 ```
+
+## Eval: 4B multi-node script
+
+```bash
+source activate <CONDA_ENV>
+set -a; source <ENV_FILE>; set +a
+
+# Optional: evaluate a specific checkpoint
+export HF_CKPT=<REPO_ROOT>/export/hf/swe-rl-4b_iter180
+
+cd <REPO_ROOT>
+bash swe-rl/scripts/eval_4b_4nodes.sh
+```
+
+`swe-rl/scripts/eval_4b_4nodes.sh` evaluation logic:
+
+- Starts remote SWE env pool server and joins Ray workers on 4 GPU nodes
+- Runs two eval passes in sequence:
+  - SWE-Bench Verified (`text/metadata` payload)
+  - SWE-Gym 293 (`prompt/instance` payload)
+- Each eval trajectory calls `generate_with_swe.generate` + `reward_func`
+- Cleans remote Docker containers between phases and writes artifacts to:
+  - `${EXPORT_ROOT}/swe_rollouts/eval_<run_tag>_verified_<ts>`
+  - `${EXPORT_ROOT}/swe_rollouts/eval_<run_tag>_swegym_<ts>`
 
 ## Train: 8 nodes (Qwen3-32B)
 
