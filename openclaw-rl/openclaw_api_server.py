@@ -51,6 +51,45 @@ def _normalize_messages_for_template(messages: list[dict]) -> list[dict]:
     - multimodal content lists → plain text strings
     - tool_call arguments: JSON string → dict (for Jinja2 |items)
     """
+    """
+    messages = [
+                      {
+                        "role": "user",
+                        "content": "北京今天天气怎么样？"
+                      }, 
+                # 第一轮
+                      {
+                        "role": "assistant",
+                        "content": "我来帮您查询北京的天气。",
+                        "tool_calls": [
+                          {
+                            "id": "call_111222",
+                            "type": "function",
+                            "function": {
+                              "name": "get_weather",
+                              "arguments": "{\"location\": \"北京\"}"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "role": "tool",
+                        "tool_call_id": "call_111222",
+                        "name": "get_weather",
+                        "content": "{\"temperature\": 25, "condition": "晴天\", "humidity": "60%\"}"
+                      },
+                      # 第二轮
+                      {
+                        "role": "assistant",
+                        "content": "北京今天的天气是晴天，温度25度，湿度60%。"
+                      },
+                      {
+                        "role": "user",
+                        "content": "明天呢？"
+                      }
+                    ]
+        
+    """
     out = []
     for msg in messages:
         m = dict(msg)
@@ -60,6 +99,19 @@ def _normalize_messages_for_template(messages: list[dict]) -> list[dict]:
         if not isinstance(raw, str) and raw is not None:
             m["content"] = _flatten_message_content(raw)
         if m.get("tool_calls"):
+            """
+            原始tool_calls=[
+                              {
+                                "id": "call_111222",
+                                "type": "function",
+                                "function": {
+                                  "name": "get_weather",
+                                  "arguments": "{\"location\": \"北京\"}"
+                                }
+                              # 经过处理后，arguments这里的字符串改字典了
+                              }
+                        ]
+            """
             m["tool_calls"] = [_normalize_tool_call(tc) for tc in m["tool_calls"]]
         out.append(m)
     return out
@@ -86,6 +138,35 @@ def _extract_logprobs_from_chat_response(choice: dict[str, Any]) -> list[float]:
     if not isinstance(logprobs_obj, dict):
         return []
     content = logprobs_obj.get("content")
+    """
+    content =  [
+                  {"token": "我", "logprob": -0.1, "bytes": [228, 189,
+          160]},
+                  {"token": "来", "logprob": -0.05, "bytes": [228, 189,
+          166]},
+                  {"token": "帮", "logprob": -0.08, "bytes": [240, 159,
+          128, 132]},
+                  {"token": "您", "logprob": -0.03, "bytes": [228, 189,
+          160]},
+                  {"token": "查", "logprob": -0.07, "bytes": [229, 133,
+          129]},
+                  {"token": "询", "logprob": -0.06, "bytes": [229, 133,
+          151]},
+                  {"token": "北", "logprob": -0.04, "bytes": [228, 184,
+          150]},
+                  {"token": "京", "logprob": -0.05, "bytes": [228, 189,
+          156]},
+                  {"token": "的", "logprob": -0.03, "bytes": [228, 189,
+          160]},
+                  {"token": "天", "logprob": -0.06, "bytes": [228, 189,
+          160]},
+                  {"token": "气", "logprob": -0.07, "bytes": [228, 186,
+          172]}
+                ]
+              }
+            }
+                ]
+    """
     if not isinstance(content, list):
         return []
     return [float(item.get("logprob", 0.0)) for item in content if isinstance(item, dict)]
@@ -315,9 +396,46 @@ class OpenClawAPIServer:
     def _flush_pending_record(self, session_id: str, next_state):
         """Write out the buffered record for *session_id* with its next_state and fire PRM."""
         rec = self._pending_records.pop(session_id, None)
+
+        """
+        rec= {
+            "session_id": session_id,
+            "turn": 1,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "messages": [
+                      {
+                        "role": "user",
+                        "content": "北京今天天气怎么样？"
+                      }]
+            "prompt_text": '和全部的message相关‘,
+            "response_text": ’回答包括，需要调用的tool_calls等',
+            "tool_calls": [
+                              {
+                                "id": "call_111222",
+                                "type": "function",
+                                "function": {
+                                  "name": "get_weather",
+                                  "arguments": "{\"location\": \"北京\"}"
+                                }
+                              }
+                        ],
+        }
+        
+        """
+
+
         if rec is None:
             return
         rec["next_state"] = next_state
+        """
+        next_state =  {
+                        "role": "tool",
+                        "tool_call_id": "call_111222",
+                        "name": "get_weather",
+                        "content": "{\"temperature\": 25, "condition": "晴天\", "humidity": "60%\"}"
+                       }
+        
+        """
         if next_state:
             ns_role = next_state.get("role", "?")
             ns_content = _flatten_message_content(next_state.get("content"))
@@ -433,6 +551,11 @@ class OpenClawAPIServer:
         else:
             judge_prompt = "\n".join(m["content"] for m in msgs)
 
+        """
+        过程奖励打分
+        next_role ='user'  :如果是感谢，推进boxed{1}，反驳boxed{-1}，模糊不清boxed{0}
+        next_role ='tool'  :工具执行成功，且符合意图，打1，否则 0
+        """
         results = await asyncio.gather(
             *[self._query_prm_once(judge_prompt, i) for i in range(self._prm_m)]
         )
@@ -445,6 +568,8 @@ class OpenClawAPIServer:
                 if s is not None and s == int(final):
                     representative = text
                     break
+
+        # 多次打分取众数，然后找final得分的推理文本
 
         votes_display = [s if s is not None else "fail" for s in scores]
         logger.info(
@@ -477,10 +602,50 @@ class OpenClawAPIServer:
         session_done: bool,
     ) -> dict[str, Any]:
         messages = body.get("messages")
+        """
+        messages = [
+                      {
+                        "role": "user",
+                        "content": "北京今天天气怎么样？"
+                      }, 
+                # 第一轮
+                      {
+                        "role": "assistant",
+                        "content": "我来帮您查询北京的天气。",
+                        "tool_calls": [
+                          {
+                            "id": "call_111222",
+                            "type": "function",
+                            "function": {
+                              "name": "get_weather",
+                              "arguments": "{\"location\": \"北京\"}"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "role": "tool",
+                        "tool_call_id": "call_111222",
+                        "name": "get_weather",
+                        "content": "{\"temperature\": 25, "condition": "晴天\", "humidity": "60%\"}"
+                      },
+                      # 第二轮
+                      {
+                        "role": "assistant",
+                        "content": "北京今天的天气是晴天，温度25度，湿度60%。"
+                      },
+                      {
+                        "role": "user",
+                        "content": "明天呢？"
+                      }
+                    ]
+        
+        """
         if not isinstance(messages, list) or not messages:
             raise HTTPException(status_code=400, detail="messages must be a non-empty list")
 
         tools = body.get("tools")
+        # 这里获取的是agent内置的所有tools
 
         forward_body = {k: v for k, v in body.items() if k not in _NON_STANDARD_BODY_KEYS}
         forward_body["stream"] = False
@@ -503,9 +668,34 @@ class OpenClawAPIServer:
 
         choice = output.get("choices", [{}])[0]
         assistant_msg = choice.get("message", {})
+        """
+        数据格式assistant_msg
+        第一轮
+        {
+            "role": "assistant",
+            "content": "我来帮您查询北京的天气。",
+            "tool_calls": [
+              {
+                "id": "call_111222",
+                "type": "function",
+                "function": {
+                  "name": "get_weather",
+                  "arguments": "{\"location\": \"北京\"}"
+                }
+              }
+            ]
+        }
+        
+        第二轮，对tool_calls的返回
+        {
+            "role": "assistant",
+            "content": "北京今天的天气是晴天，温度25度，湿度60%。"
+          }
+        """
         tool_calls = assistant_msg.get("tool_calls") or []
 
         content = assistant_msg.get("content") or ""
+        # content是模型回复的文本信息
         reasoning = assistant_msg.get("reasoning_content") or ""
         logger.info(
             f"{_YELLOW}[OpenClaw] [{turn_type}] session={session_id} "
@@ -520,6 +710,15 @@ class OpenClawAPIServer:
 
         if turn_type == "main":
             if session_id in self._pending_records and messages:
+                """
+                如果有工具调用
+                messages[-1]= {
+                                "role": "tool",
+                                "tool_call_id": "call_111222",
+                                "name": "get_weather",
+                                "content": "{\"temperature\": 25, "condition": "晴天\", "humidity": "60%\"}"
+                               }
+                """
                 self._flush_pending_record(session_id, messages[-1])
 
             response_msg = dict(assistant_msg)
@@ -530,6 +729,7 @@ class OpenClawAPIServer:
             norm_resp = _normalize_messages_for_template([response_msg])[0]
             full_norm = norm_msgs + [norm_resp]
 
+            # todo 以第一次为例，这里的是什么？纯文本信息？response_text是"我来帮您查询北京的天气。“还是也有tool_calls的部分
             prompt_text = self.tokenizer.apply_chat_template(
                 norm_msgs, tools=tools, tokenize=False, add_generation_prompt=True,
             )
@@ -552,6 +752,8 @@ class OpenClawAPIServer:
                 return {"response": output}
 
             response_logprobs = _extract_logprobs_from_chat_response(choice)
+            # 列表存储每个字的logprobs
+
             if len(response_logprobs) > len(response_ids):
                 response_logprobs = response_logprobs[: len(response_ids)]
             elif len(response_logprobs) < len(response_ids):
@@ -564,6 +766,7 @@ class OpenClawAPIServer:
                 "prompt_text": prompt_text,
                 "response_text": response_text,
             }
+            # RL模式下的turn_data
 
             self._turn_counts[session_id] = self._turn_counts.get(session_id, 0) + 1
             turn_num = self._turn_counts[session_id]

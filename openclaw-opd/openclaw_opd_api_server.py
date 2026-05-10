@@ -592,6 +592,7 @@ class OpenClawOPDAPIServer:
         else:
             judge_prompt = "\n".join(m["content"] for m in judge_msgs)
 
+        # 提取hint 的地方：1.工具失败 2.用户反驳
         votes = await asyncio.gather(*[self._query_judge_once(judge_prompt, i) for i in range(self._prm_m)])
 
         if self._eval_mode:
@@ -789,6 +790,7 @@ class OpenClawOPDAPIServer:
 
             self._turn_counts[session_id] = prev_turn_num + 1
             turn_num = self._turn_counts[session_id]
+            #todo 既然prompt_ids是完整的messages,为什么这里还有一个message?
             turn_data = {
                 "prompt_ids": prompt_ids,
                 "response_ids": response_ids,
@@ -900,6 +902,7 @@ class OpenClawOPDAPIServer:
         sample.status = Sample.Status.COMPLETED
         sample.index = next(self._index_counter)
         sample.group_index = next(self._group_counter)
+        # todo 仿照rl模式下，获取的eval_score没有被使用吗？
         sample.reward = {"score": 1.0}
 
         logger.info(

@@ -148,6 +148,7 @@ class OpenClawCombineAPIServer(OpenClawOPDAPIServer):
     # ------------------------------------------------------------------
     # Dispatch: ONE sample per turn, merging both signals when possible.
     # ------------------------------------------------------------------
+    # todo combine模式下，既然是复用的之前的东西，为什么没有teacher_logprobs?
     def _maybe_submit_ready_samples(
         self, session_id: str, force_drop_without_next_state: bool = False,
     ):
