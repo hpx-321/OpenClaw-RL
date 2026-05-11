@@ -114,6 +114,9 @@ class RayTrainGroup:
 
     def async_train(self, rollout_id, rollout_data_ref):
         """Do one rollout training"""
+        """
+        并行执行，在每一个_actor_handles中执行train 
+        """
         return [actor.train.remote(rollout_id, rollout_data_ref) for actor in self._actor_handlers]
 
     def save_model(self, rollout_id, force_sync=False):
